@@ -1,0 +1,36 @@
+- name: "Register insights-clients"
+  hosts: all
+  order: sorted
+  become: true
+  gather_facts: true
+  tasks:
+
+    - name: Check if insights-client RPM is installed
+      ansible.builtin.yum:
+        name: insights-client
+        state: present
+      register: insights_install
+
+    - name: Run insights-client status to check if registered
+      ansible.builtin.command: insights-client --status
+      register: insights_status
+      changed_when: false
+       #when: insights_install.changed == False  # Only check status if the package was already installed
+       #ignore_errors: yes
+      failed_when: >
+        (insights_status.rc != 0 and
+        'NOT registered' not in insights_status.stdout and
+        'registered' not in insights_status.stdout.lower())
+
+    - name: Parse insights-client status for registration
+      ansible.builtin.set_fact:
+        is_registered: "{{ 'Registered' in insights_status.stdout }}"
+       #when: insights_install.changed == False
+
+    - name: Register the server with insights-client
+      ansible.builtin.command: insights-client --register
+      register: insights_register
+      when: is_registered == false
+      changed_when: true
+      failed_when: insights_register.rc != 0
+        #ignore_errors: true
